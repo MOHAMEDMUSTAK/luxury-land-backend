@@ -1,0 +1,162 @@
+{
+  "register": {
+    "status": 201,
+    "data": {
+      "_id": "69c3cfed128b0cce2d3ec99a",
+      "name": "mustak",
+      "email": "mustak1774440429040@gmail.com",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YzNjZmVkMTI4YjBjY2UyZDNlYzk5YSIsImlhdCI6MTc3NDQ0MDQyOSwiZXhwIjoxNzc3MDMyNDI5fQ.vxYJH7C2FEe6WbEThMM1KHh0opSl6e6NZTDSyuZRIzQ"
+    }
+  },
+  "login": {
+    "status": 200,
+    "data": {
+      "_id": "69c3cfed128b0cce2d3ec99a",
+      "name": "mustak",
+      "email": "mustak1774440429040@gmail.com",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YzNjZmVkMTI4YjBjY2UyZDNlYzk5YSIsImlhdCI6MTc3NDQ0MDQzMCwiZXhwIjoxNzc3MDMyNDMwfQ.sWrmOSO2et4H_1gkOakZfwIf5811filx1yfGPNULa34"
+    }
+  },
+  "createLand": {
+    "status": 201,
+    "data": {
+      "title": "Land in Attukkulam",
+      "price": 500000,
+      "description": "Good land",
+      "state": "Tamil Nadu",
+      "district": "Madurai",
+      "town": "Melur",
+      "area": "Attukkulam",
+      "images": [],
+      "owner": "69c3cfed128b0cce2d3ec99a",
+      "ownerPhone": "Not Provided",
+      "_id": "69c3cfee128b0cce2d3ec99e",
+      "createdAt": "2026-03-25T12:07:10.142Z",
+      "__v": 0
+    }
+  },
+  "getAllLands": {
+    "status": 200,
+    "data": [
+      {
+        "_id": "69c3cf83ca3c84568bd74d70",
+        "title": "Land in Attukkulam",
+        "price": 500000,
+        "description": "Good land",
+        "state": "Tamil Nadu",
+        "district": "Madurai",
+        "town": "Melur",
+        "area": "Attukkulam",
+        "images": [],
+        "owner": {
+          "_id": "69c3cf82ca3c84568bd74d6c",
+          "name": "mustak",
+          "email": "mustak1774440322711@gmail.com"
+        },
+        "ownerPhone": "Not Provided",
+        "createdAt": "2026-03-25T12:05:23.786Z",
+        "__v": 0
+      },
+      {
+        "_id": "69c3cfa8ca3c84568bd74d7b",
+        "title": "Land in Attukkulam",
+        "price": 500000,
+        "description": "Good land",
+        "state": "Tamil Nadu",
+        "district": "Madurai",
+        "town": "Melur",
+        "area": "Attukkulam",
+        "images": [],
+        "owner": {
+          "_id": "69c3cfa7ca3c84568bd74d77",
+          "name": "mustak",
+          "email": "mustak1774440359040@gmail.com"
+        },
+        "ownerPhone": "Not Provided",
+        "createdAt": "2026-03-25T12:06:00.102Z",
+        "__v": 0
+      },
+      {
+        "_id": "69c3cfee128b0cce2d3ec99e",
+        "title": "Land in Attukkulam",
+        "price": 500000,
+        "description": "Good land",
+        "state": "Tamil Nadu",
+        "district": "Madurai",
+        "town": "Melur",
+        "area": "Attukkulam",
+        "images": [],
+        "owner": {
+          "_id": "69c3cfed128b0cce2d3ec99a",
+          "name": "mustak",
+          "email": "mustak1774440429040@gmail.com"
+        },
+        "ownerPhone": "Not Provided",
+        "createdAt": "2026-03-25T12:07:10.142Z",
+        "__v": 0
+      }
+    ]
+  },
+  "searchLands": {
+    "status": 200,
+    "data": [
+      {
+        "_id": "69c3cf83ca3c84568bd74d70",
+        "title": "Land in Attukkulam",
+        "price": 500000,
+        "description": "Good land",
+        "state": "Tamil Nadu",
+        "district": "Madurai",
+        "town": "Melur",
+        "area": "Attukkulam",
+        "images": [],
+        "owner": {
+          "_id": "69c3cf82ca3c84568bd74d6c",
+          "name": "mustak",
+          "email": "mustak1774440322711@gmail.com"
+        },
+        "ownerPhone": "Not Provided",
+        "createdAt": "2026-03-25T12:05:23.786Z",
+        "__v": 0
+      },
+      {
+        "_id": "69c3cfa8ca3c84568bd74d7b",
+        "title": "Land in Attukkulam",
+        "price": 500000,
+        "description": "Good land",
+        "state": "Tamil Nadu",
+        "district": "Madurai",
+        "town": "Melur",
+        "area": "Attukkulam",
+        "images": [],
+        "owner": {
+          "_id": "69c3cfa7ca3c84568bd74d77",
+          "name": "mustak",
+          "email": "mustak1774440359040@gmail.com"
+        },
+        "ownerPhone": "Not Provided",
+        "createdAt": "2026-03-25T12:06:00.102Z",
+        "__v": 0
+      },
+      {
+        "_id": "69c3cfee128b0cce2d3ec99e",
+        "title": "Land in Attukkulam",
+        "price": 500000,
+        "description": "Good land",
+        "state": "Tamil Nadu",
+        "district": "Madurai",
+        "town": "Melur",
+        "area": "Attukkulam",
+        "images": [],
+        "owner": {
+          "_id": "69c3cfed128b0cce2d3ec99a",
+          "name": "mustak",
+          "email": "mustak1774440429040@gmail.com"
+        },
+        "ownerPhone": "Not Provided",
+        "createdAt": "2026-03-25T12:07:10.142Z",
+        "__v": 0
+      }
+    ]
+  }
+}
