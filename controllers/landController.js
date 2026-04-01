@@ -165,32 +165,28 @@ const getLandById = async (req, res) => {
     const cacheKey = `land_${req.params.id}`;
     const cached = cache.get(cacheKey);
     
-    // Capture Metadata FIRST (OLX-style reliable tracking)
-    const metadata = {
-      ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown',
-      userAgent: req.headers['user-agent'] || 'unknown',
-      userId: req.user?._id || req.user?.id || null
-    };
-
     // Return early if cached
     if (cached) {
+       // Return data immediately
        res.status(200).json(cached);
-       handleViewTracking(metadata, req.params.id);
+       
+       // Process view tracking in background (non-blocking)
+       handleViewTracking(req, req.params.id);
        return;
     }
 
     const land = await Land.findById(req.params.id).populate('owner', 'name email profileImage totalResponseTime responseCount lastActive isVerified');
     if (!land) return res.status(404).json({ message: 'Land not found' });
 
-    // Cache the result for 1 minute (Reduced for better 'Views' refresh feel)
-    cache.set(cacheKey, land, 60);
+    // Cache the result for 5 minutes (Instantly speeds up multiple clicks)
+    cache.set(cacheKey, land, 300);
 
     // Send land details IMMEDIATELY
     res.status(200).json(land);
 
     // --- NON-BLOCKING SIDE EFFECTS (Background Processing) ---
-    // Pass captured metadata to zero-out sequential latency
-    handleViewTracking(metadata, req.params.id);
+    // Handle views and history in a separate async block to zero-out latency
+    handleViewTracking(req, req.params.id);
   } catch (error) {
     console.error("GET_LAND_BY_ID_ERROR:", error.message);
     res.status(500).json({ message: 'Server Error', error: error.message });
@@ -198,37 +194,38 @@ const getLandById = async (req, res) => {
 };
 
 // Internal Helper for Background Side Effects (OLX-style speed)
-async function handleViewTracking(metadata, landId) {
+async function handleViewTracking(req, landId) {
   try {
-    const { ip, userAgent, userId } = metadata;
-
     // 1. Unique View Tracking (30-min mirror)
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
     let viewerIdentifier;
-    if (userId) {
-      viewerIdentifier = userId.toString();
+
+    if (req.user) {
+      viewerIdentifier = req.user._id.toString();
     } else {
       const simplifiedUA = userAgent.split(' ').slice(0, 3).join(' ');
       viewerIdentifier = crypto.createHash('md5').update(`${ip}-${simplifiedUA}`).digest('hex');
     }
     
-    // Try to create a unique view record (atomic)
     const isNewView = await View.create({ landId, viewerIdentifier }).catch(() => null); 
 
     if (isNewView) {
       await Land.findByIdAndUpdate(landId, { $inc: { views: 1, viewCount: 1 } });
-      // Invalidate cache immediately on new view to show updated count
+      // Clear cache for this specific land so its view count is fresh next time
       cache.data.delete(`land_${landId}`);
     }
 
     // 2. Track Recently Viewed (If authenticated)
-    if (userId) {
-      const user = await User.findById(userId);
+    if (req.user) {
+      const user = await User.findById(req.user._id);
       if (user) {
+        // Filter out same property and older entries
         user.recentlyViewed = (user.recentlyViewed || [])
           .filter(item => item.propertyId && item.propertyId.toString() !== landId.toString());
         
         user.recentlyViewed.unshift({ propertyId: landId, viewedAt: new Date() });
-        user.recentlyViewed = user.recentlyViewed.slice(0, 20); 
+        user.recentlyViewed = user.recentlyViewed.slice(0, 20); // Keep last 20
         await user.save();
       }
     }
