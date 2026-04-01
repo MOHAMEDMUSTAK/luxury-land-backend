@@ -107,21 +107,22 @@ const loginUser = async (req, res) => {
 // @access  Public (for demo purposes)
 const toggleWishlist = async (req, res) => {
   try {
-    // Assuming auth logic provides req.user; here using req.body.userId for demo
-    const userId = req.body.userId;
+    // Secure: Use req.user instead of req.body.userId
+    const userId = req.user._id;
     const landId = req.params.landId;
-
-    if (!userId) return res.status(401).json({ message: 'User ID required' });
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const isWishlisted = user.wishlist.includes(landId);
+    // FIX: Type mismatch fix (ObjectId vs String) using .some and .toString()
+    const isWishlisted = user.wishlist.some(id => id.toString() === landId);
     
     if (isWishlisted) {
-      user.wishlist = user.wishlist.filter(id => id.toString() !== landId);
+      // Atomic Unsave
+      await User.findByIdAndUpdate(userId, { $pull: { wishlist: landId } });
     } else {
-      user.wishlist.push(landId);
+      // Atomic Save
+      await User.findByIdAndUpdate(userId, { $addToSet: { wishlist: landId } });
       
       // Create Notification for Land Owner
       try {
@@ -139,16 +140,21 @@ const toggleWishlist = async (req, res) => {
       }
     }
 
-    await user.save();
-
-    // Sync wishlistCount on Land model
+    // Sync wishlistCount on Land model (Recalculate for 100% accuracy)
+    let wishlistCount = 0;
     try {
-      const count = await User.countDocuments({ wishlist: landId });
-      await Land.findByIdAndUpdate(landId, { wishlistCount: count });
+      wishlistCount = await User.countDocuments({ wishlist: landId });
+      await Land.findByIdAndUpdate(landId, { wishlistCount });
     } catch (syncError) {
       console.error("WISHLIST_COUNT_SYNC_ERROR:", syncError.message);
     }
-    return res.status(200).json({ wishlist: user.wishlist });
+
+    // Fetch updated wishlist to return to frontend
+    const updatedUser = await User.findById(userId).select('wishlist');
+    return res.status(200).json({ 
+      wishlist: updatedUser.wishlist || [],
+      wishlistCount 
+    });
   } catch (error) {
     console.error("TOGGLE_WISHLIST_ERROR:", error);
     res.status(500).json({ message: 'Server Error' });

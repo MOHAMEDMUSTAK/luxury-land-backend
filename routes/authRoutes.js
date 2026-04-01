@@ -7,7 +7,7 @@ const upload = require('../middleware/upload');
 router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.get('/me', protect, getMe);
-router.post('/wishlist/:landId', toggleWishlist);
+router.post('/wishlist/:landId', protect, toggleWishlist);
 router.put('/profile', protect, upload.single('profileImage'), updateProfile);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password/:token', resetPassword);
