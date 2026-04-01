@@ -28,31 +28,26 @@ const getLands = async (req, res) => {
       minPrice, maxPrice, minSize, maxSize, 
       listingType, propertyCategory, isActive, type,
       sortBy,
-      lat, lng, maxDistance = 50000 
+      lat, lng, maxDistance = 50000,
+      page = 1,
+      limit = 12
     } = req.query;
 
     let query = {};
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Global Smart Search (Amazon Style)
+    // Optimized Smart Search using Text Index
     if (search) {
-      const searchRegex = { $regex: search, $options: 'i' };
-      query.$or = [
-        { title: searchRegex },
-        { description: searchRegex },
-        { state: searchRegex },
-        { district: searchRegex },
-        { town: searchRegex },
-        { area: searchRegex }
-      ];
+      query.$text = { $search: search };
     } else {
-      // Direct filters (if provided)
+      // Direct filters
       if (state) query.state = { $regex: state, $options: 'i' };
       if (district) query.district = { $regex: district, $options: 'i' };
       if (town) query.town = { $regex: town, $options: 'i' };
       if (area) query.area = { $regex: area, $options: 'i' };
     }
 
-    // Range Filters - MUST be listingType aware
+    // Range Filters
     const isRent = listingType === 'rent';
     const priceField = isRent ? 'rentPerMonth' : 'price';
 
@@ -62,17 +57,12 @@ const getLands = async (req, res) => {
       if (maxPrice) query[priceField].$lte = Number(maxPrice);
     }
     
-    // Size Filter (Unit Aware)
+    // Size Filter
     if (minSize || maxSize) {
       const unit = req.query.sizeUnitFilter || 'sq ft';
       query.sizeInSqft = {};
-      
-      if (minSize) {
-        query.sizeInSqft.$gte = getSqftValue(minSize, unit);
-      }
-      if (maxSize) {
-        query.sizeInSqft.$lte = getSqftValue(maxSize, unit);
-      }
+      if (minSize) query.sizeInSqft.$gte = getSqftValue(minSize, unit);
+      if (maxSize) query.sizeInSqft.$lte = getSqftValue(maxSize, unit);
     }
     
     if (listingType) query.listingType = listingType;
@@ -80,22 +70,20 @@ const getLands = async (req, res) => {
     if (type) query.type = type;
     if (req.query.landType) query.landType = req.query.landType;
     
-    // Default to only active listings for public search unless specified
+    // Active only by default
     if (isActive !== undefined) {
       query.isActive = isActive === 'true';
     } else {
       query.isActive = true; 
     }
 
-    console.log("--- FETCH LANDS QUERY ---");
-    console.log("QUERY PARAMS:", req.query);
-    console.log("FINAL DB QUERY:", JSON.stringify(query, null, 2));
-
     // Sorting
     let sort = { createdAt: -1 };
-    if (sortBy === 'price_asc') sort = { [priceField]: 1 };
+    if (search) {
+      // Sort by relevance if searching
+      sort = { score: { $meta: "textScore" } };
+    } else if (sortBy === 'price_asc') sort = { [priceField]: 1 };
     else if (sortBy === 'price_desc') sort = { [priceField]: -1 };
-    else if (sortBy === 'latest') sort = { createdAt: -1 };
     else if (sortBy === 'popular') sort = { views: -1 };
 
     if (lat && lng) {
@@ -110,8 +98,25 @@ const getLands = async (req, res) => {
       };
     }
 
-    const lands = await Land.find(query).sort(sort).populate('owner', 'name email profileImage');
-    res.status(200).json(lands);
+    // Optimized Data Fetching:
+    // 1. Projection: Only fetch what's needed for the card
+    // 2. Pagination: Use skip/limit
+    const total = await Land.countDocuments(query);
+    const lands = await Land.find(query)
+      .select('title images town state propertyCategory listingType size sizeUnit landType price rentPerMonth createdAt averageRating reviewCount status owner')
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate('owner', 'name profileImage');
+
+    res.status(200).json({
+      success: true,
+      count: lands.length,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      data: lands
+    });
   } catch (error) {
     console.error("GET_LANDS_ERROR:", error.message);
     res.status(500).json({ message: 'Server Error: Failed to fetch lands', error: error.message });
@@ -502,6 +507,7 @@ const getRecentlyViewed = async (req, res) => {
     
     const user = await User.findById(req.user._id).populate({
       path: 'recentlyViewed.propertyId',
+      select: 'title images town state propertyCategory listingType size sizeUnit landType price rentPerMonth createdAt averageRating reviewCount status owner',
       populate: { path: 'owner', select: 'name profileImage isVerified' }
     });
 
