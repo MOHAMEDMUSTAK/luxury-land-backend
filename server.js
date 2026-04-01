@@ -22,9 +22,10 @@ const allowedOrigins = [
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
         callback(null, true);
       } else {
+        console.error("Socket.io CORS BLOCKED for origin:", origin);
         callback(new Error('Not allowed by CORS'));
       }
     },
@@ -90,21 +91,14 @@ io.on('connection', (socket) => {
 
 // Middleware
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // In development, allow network IP and other local variants
-    if (process.env.NODE_ENV !== 'production') {
-      return callback(null, true); 
-    }
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+      } else {
+        console.error("Express CORS BLOCKED for origin:", origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
   credentials: true
 }));
 app.use(express.json());
