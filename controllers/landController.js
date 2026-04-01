@@ -162,68 +162,80 @@ const getLands = async (req, res) => {
 // @access  Public
 const getLandById = async (req, res) => {
   try {
-    const land = await Land.findById(req.params.id).populate('owner', 'name email profileImage');
+    const cacheKey = `land_${req.params.id}`;
+    const cached = cache.get(cacheKey);
+    
+    // Capture Metadata FIRST (OLX-style reliable tracking)
+    const metadata = {
+      ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown',
+      userAgent: req.headers['user-agent'] || 'unknown',
+      userId: req.user?._id || req.user?.id || null
+    };
+
+    // Return early if cached
+    if (cached) {
+       res.status(200).json(cached);
+       handleViewTracking(metadata, req.params.id);
+       return;
+    }
+
+    const land = await Land.findById(req.params.id).populate('owner', 'name email profileImage totalResponseTime responseCount lastActive isVerified');
     if (!land) return res.status(404).json({ message: 'Land not found' });
 
-    // --- ENHANCED UNIQUE VIEW TRACKING (30-min window) ---
-    try {
-      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
-      const userAgent = req.headers['user-agent'] || 'unknown';
-      let viewerIdentifier;
+    // Cache the result for 1 minute (Reduced for better 'Views' refresh feel)
+    cache.set(cacheKey, land, 60);
 
-      if (req.user) {
-        // Authenticated user: Use ID
-        viewerIdentifier = req.user._id.toString();
-      } else {
-        // Guest: Use hashed IP + simplified UA for better uniqueness
-        const simplifiedUA = userAgent.split(' ').slice(0, 3).join(' '); // Basic browser info
-        viewerIdentifier = crypto.createHash('md5').update(`${ip}-${simplifiedUA}`).digest('hex');
-      }
-      
-      // Try to create a unique view record (atomic)
-      const isNewView = await View.create({ 
-        landId: req.params.id, 
-        viewerIdentifier 
-      }).catch(() => null); 
+    // Send land details IMMEDIATELY
+    res.status(200).json(land);
 
-      if (isNewView) {
-        // Batch increment both fields if needed or pick one (views/viewCount)
-        await Land.findByIdAndUpdate(req.params.id, { $inc: { views: 1, viewCount: 1 } });
-      }
-    } catch (viewError) {
-      console.error("VIEW_TRACKING_ERROR:", viewError.message);
-    }
-
-    // Track Recently Viewed (If authenticated)
-    if (req.user) {
-      try {
-        const user = await User.findById(req.user._id);
-        if (user) {
-          // Initialize if missing (for legacy users)
-          if (!user.recentlyViewed) user.recentlyViewed = [];
-          
-          // Remove if already exists (to move it to top and update timestamp)
-          user.recentlyViewed = user.recentlyViewed.filter(item => 
-            item.propertyId && item.propertyId.toString() !== land._id.toString()
-          );
-          
-          // Push to front with new timestamp
-          user.recentlyViewed.unshift({ propertyId: land._id, viewedAt: new Date() });
-          
-          // Keep only last 5 (Smart Limit)
-          user.recentlyViewed = user.recentlyViewed.slice(0, 5);
-          await user.save();
-        }
-      } catch (err) {
-        console.error("RECENTLY_VIEWED_TRACK_ERROR:", err.message);
-      }
-    }
-
-    res.json(land);
+    // --- NON-BLOCKING SIDE EFFECTS (Background Processing) ---
+    // Pass captured metadata to zero-out sequential latency
+    handleViewTracking(metadata, req.params.id);
   } catch (error) {
+    console.error("GET_LAND_BY_ID_ERROR:", error.message);
     res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
+
+// Internal Helper for Background Side Effects (OLX-style speed)
+async function handleViewTracking(metadata, landId) {
+  try {
+    const { ip, userAgent, userId } = metadata;
+
+    // 1. Unique View Tracking (30-min mirror)
+    let viewerIdentifier;
+    if (userId) {
+      viewerIdentifier = userId.toString();
+    } else {
+      const simplifiedUA = userAgent.split(' ').slice(0, 3).join(' ');
+      viewerIdentifier = crypto.createHash('md5').update(`${ip}-${simplifiedUA}`).digest('hex');
+    }
+    
+    // Try to create a unique view record (atomic)
+    const isNewView = await View.create({ landId, viewerIdentifier }).catch(() => null); 
+
+    if (isNewView) {
+      await Land.findByIdAndUpdate(landId, { $inc: { views: 1, viewCount: 1 } });
+      // Invalidate cache immediately on new view to show updated count
+      cache.data.delete(`land_${landId}`);
+    }
+
+    // 2. Track Recently Viewed (If authenticated)
+    if (userId) {
+      const user = await User.findById(userId);
+      if (user) {
+        user.recentlyViewed = (user.recentlyViewed || [])
+          .filter(item => item.propertyId && item.propertyId.toString() !== landId.toString());
+        
+        user.recentlyViewed.unshift({ propertyId: landId, viewedAt: new Date() });
+        user.recentlyViewed = user.recentlyViewed.slice(0, 20); 
+        await user.save();
+      }
+    }
+  } catch (err) {
+    console.error("BACKGROUND_PROCESSING_ERROR:", err.message);
+  }
+}
 
 const addLand = async (req, res) => {
   try {
