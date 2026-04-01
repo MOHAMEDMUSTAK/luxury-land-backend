@@ -2,30 +2,6 @@ const Land = require('../models/Land');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const View = require('../models/View');
-const crypto = require('crypto');
-
-// Simple In-Memory Cache for Performance
-const cache = {
-  data: new Map(),
-  get(key) {
-    const item = this.data.get(key);
-    if (!item) return null;
-    if (Date.now() > item.expiry) {
-      this.data.delete(key);
-      return null;
-    }
-    return item.value;
-  },
-  set(key, value, ttlSeconds = 60) {
-    this.data.set(key, {
-      value,
-      expiry: Date.now() + (ttlSeconds * 1000)
-    });
-  },
-  clear() {
-    this.data.clear();
-  }
-};
 
 // Helper to calculate sq ft value for any unit
 const getSqftValue = (value, unit) => {
@@ -57,10 +33,6 @@ const getLands = async (req, res) => {
       page = 1,
       limit = 12
     } = req.query;
-
-    const cacheKey = `lands_${JSON.stringify(req.query)}`;
-    const cached = cache.get(cacheKey);
-    if (cached) return res.status(200).json(cached);
 
     let query = {};
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -132,25 +104,20 @@ const getLands = async (req, res) => {
     // 2. Pagination: Use skip/limit
     const total = await Land.countDocuments(query);
     const lands = await Land.find(query)
-      .select('title images town state propertyCategory listingType size sizeUnit landType price rentPerMonth createdAt averageRating reviewCount status owner views viewCount wishlistCount')
+      .select('title images town state propertyCategory listingType size sizeUnit landType price rentPerMonth createdAt averageRating reviewCount status owner')
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit))
       .populate('owner', 'name profileImage');
 
-    const result = {
+    res.status(200).json({
       success: true,
       count: lands.length,
       total,
       page: parseInt(page),
       pages: Math.ceil(total / limit),
       data: lands
-    };
-
-    // Cache the result for 2 minutes (Adjustable)
-    cache.set(cacheKey, result, 120);
-
-    res.status(200).json(result);
+    });
   } catch (error) {
     console.error("GET_LANDS_ERROR:", error.message);
     res.status(500).json({ message: 'Server Error: Failed to fetch lands', error: error.message });
@@ -165,29 +132,17 @@ const getLandById = async (req, res) => {
     const land = await Land.findById(req.params.id).populate('owner', 'name email profileImage');
     if (!land) return res.status(404).json({ message: 'Land not found' });
 
-    // --- ENHANCED UNIQUE VIEW TRACKING (30-min window) ---
+    // Increment views uniquely (30-min window)
     try {
-      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
-      const userAgent = req.headers['user-agent'] || 'unknown';
-      let viewerIdentifier;
-
-      if (req.user) {
-        // Authenticated user: Use ID
-        viewerIdentifier = req.user._id.toString();
-      } else {
-        // Guest: Use hashed IP + simplified UA for better uniqueness
-        const simplifiedUA = userAgent.split(' ').slice(0, 3).join(' '); // Basic browser info
-        viewerIdentifier = crypto.createHash('md5').update(`${ip}-${simplifiedUA}`).digest('hex');
-      }
+      const viewerIdentifier = req.user ? req.user._id.toString() : (req.ip || req.headers['x-forwarded-for'] || 'guest');
       
-      // Try to create a unique view record (atomic)
+      // Try to create a unique view record (will fail if viewed within 30 mins due to unique index)
       const isNewView = await View.create({ 
         landId: req.params.id, 
         viewerIdentifier 
-      }).catch(() => null); 
+      }).catch(() => null); // Ignore E11000 duplicate key error
 
       if (isNewView) {
-        // Batch increment both fields if needed or pick one (views/viewCount)
         await Land.findByIdAndUpdate(req.params.id, { $inc: { views: 1, viewCount: 1 } });
       }
     } catch (viewError) {
@@ -482,17 +437,7 @@ const toggleActive = async (req, res) => {
 // @access  Public
 const getRecommendedLands = async (req, res) => {
   try {
-    const cacheKey = 'recommended_lands';
-    const cached = cache.get(cacheKey);
-    if (cached) return res.status(200).json(cached);
-
-    const lands = await Land.find({ isActive: true })
-      .select('title images town state propertyCategory listingType size sizeUnit landType price rentPerMonth createdAt averageRating reviewCount status owner views viewCount wishlistCount')
-      .sort({ views: -1, createdAt: -1 })
-      .limit(10)
-      .populate('owner', 'name profileImage');
-
-    cache.set(cacheKey, lands, 300); // Cache for 5 mins
+    const lands = await Land.find({ isActive: true }).sort({ views: -1, createdAt: -1 }).limit(10);
     res.json(lands);
   } catch (error) {
     res.status(500).json({ message: 'Server Error', error: error.message });
@@ -542,10 +487,6 @@ const addReview = async (req, res) => {
 // @access  Public
 const getSimilarProperties = async (req, res) => {
   try {
-    const cacheKey = `similar_${req.params.id}`;
-    const cached = cache.get(cacheKey);
-    if (cached) return res.status(200).json(cached);
-
     const land = await Land.findById(req.params.id);
     if (!land) return res.status(404).json({ message: 'Land not found' });
 
@@ -558,11 +499,8 @@ const getSimilarProperties = async (req, res) => {
         { propertyCategory: land.propertyCategory }
       ]
     })
-    .select('title images town state propertyCategory listingType size sizeUnit landType price rentPerMonth createdAt averageRating reviewCount status owner views viewCount wishlistCount')
     .limit(6)
     .populate('owner', 'name profileImage isVerified');
-
-    cache.set(cacheKey, similar, 600); // Cache for 10 mins
     res.json(similar);
   } catch (error) {
     res.status(500).json({ message: 'Server Error', error: error.message });

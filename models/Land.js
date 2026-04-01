@@ -176,10 +176,6 @@ const landSchema = new mongoose.Schema({
 
 // Compound Index for High-Performance Marketplace Filtering
 landSchema.index({ isActive: 1, listingType: 1, propertyCategory: 1, createdAt: -1 });
-landSchema.index({ isActive: 1, price: 1 });
-landSchema.index({ isActive: 1, rentPerMonth: 1 });
-landSchema.index({ isActive: 1, propertyCategory: 1, price: 1 });
-landSchema.index({ isActive: 1, sizeInSqft: 1 });
 
 // Text Index for Fast Global Smart Search
 landSchema.index({ 
@@ -204,6 +200,5 @@ landSchema.index({
 // Listing/Category basic indexes
 landSchema.index({ listingType: 1 });
 landSchema.index({ propertyCategory: 1 });
-landSchema.index({ owner: 1 });
 
 module.exports = mongoose.model('Land', landSchema);
