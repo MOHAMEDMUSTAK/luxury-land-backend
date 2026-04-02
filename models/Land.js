@@ -177,6 +177,10 @@ const landSchema = new mongoose.Schema({
 // Compound Index for High-Performance Marketplace Filtering
 landSchema.index({ isActive: 1, listingType: 1, propertyCategory: 1, createdAt: -1 });
 
+// Indexes for Price/Rent sorting queries
+landSchema.index({ isActive: 1, price: 1, createdAt: -1 });
+landSchema.index({ isActive: 1, rentPerMonth: 1, createdAt: -1 });
+
 // Text Index for Fast Global Smart Search
 landSchema.index({ 
   title: 'text', 

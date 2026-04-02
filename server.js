@@ -101,7 +101,29 @@ app.use(cors({
     },
   credentials: true
 }));
+
+const compression = require('compression');
+app.use(compression());
+
+const rateLimit = require('express-rate-limit');
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300, // Limit each IP to 300 requests per windowMs
+  message: 'Too many requests from this IP, please try again after 15 minutes',
+  standardHeaders: true, 
+  legacyHeaders: false, 
+});
+app.use('/api', limiter);
+
 app.use(express.json());
+
+// Global Cache headers for GET requests to cache static reads
+app.use((req, res, next) => {
+  if (req.method === 'GET') {
+    res.set('Cache-Control', 'public, max-age=30'); // Cache for 30 seconds
+  }
+  next();
+});
 
 // Mount routes
 app.use('/api/auth', require('./routes/authRoutes'));

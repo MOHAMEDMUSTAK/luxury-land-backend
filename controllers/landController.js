@@ -108,6 +108,7 @@ const getLands = async (req, res) => {
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit))
+      .lean()
       .populate('owner', 'name profileImage');
 
     res.status(200).json({
@@ -437,7 +438,11 @@ const toggleActive = async (req, res) => {
 // @access  Public
 const getRecommendedLands = async (req, res) => {
   try {
-    const lands = await Land.find({ isActive: true }).sort({ views: -1, createdAt: -1 }).limit(10);
+    const lands = await Land.find({ isActive: true })
+      .select('title images town state propertyCategory listingType size sizeUnit landType price rentPerMonth createdAt averageRating reviewCount status owner')
+      .sort({ views: -1, createdAt: -1 })
+      .limit(10)
+      .lean();
     res.json(lands);
   } catch (error) {
     res.status(500).json({ message: 'Server Error', error: error.message });
@@ -499,7 +504,10 @@ const getSimilarProperties = async (req, res) => {
         { propertyCategory: land.propertyCategory }
       ]
     })
+    .select('title images town state propertyCategory listingType size sizeUnit landType price rentPerMonth createdAt averageRating reviewCount status owner')
+    .sort({ createdAt: -1 })
     .limit(6)
+    .lean()
     .populate('owner', 'name profileImage isVerified');
     res.json(similar);
   } catch (error) {

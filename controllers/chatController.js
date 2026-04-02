@@ -117,7 +117,7 @@ const sendChatMessage = async (req, res) => {
 // @access  Private
 const getChatMessages = async (req, res) => {
   try {
-    const chat = await Chat.findById(req.params.chatId);
+    const chat = await Chat.findById(req.params.chatId).lean();
     if (!chat) return res.status(404).json({ message: 'Chat not found' });
 
     const userId = req.user.id.toString();
