@@ -2,6 +2,7 @@ const Land = require('../models/Land');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const View = require('../models/View');
+const { getCache, setCache } = require('../utils/cache');
 
 // Helper to calculate sq ft value for any unit
 const getSqftValue = (value, unit) => {
@@ -33,6 +34,12 @@ const getLands = async (req, res) => {
       page = 1,
       limit = 12
     } = req.query;
+
+    const cacheKey = `lands_${JSON.stringify(req.query)}`;
+    const cachedData = getCache(cacheKey);
+    if (cachedData) {
+      return res.status(200).json(cachedData);
+    }
 
     let query = {};
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -111,14 +118,18 @@ const getLands = async (req, res) => {
       .lean()
       .populate('owner', 'name profileImage');
 
-    res.status(200).json({
+    const responsePayload = {
       success: true,
       count: lands.length,
       total,
       page: parseInt(page),
       pages: Math.ceil(total / limit),
       data: lands
-    });
+    };
+
+    setCache(cacheKey, responsePayload, 60);
+
+    res.status(200).json(responsePayload);
   } catch (error) {
     console.error("GET_LANDS_ERROR:", error.message);
     res.status(500).json({ message: 'Server Error: Failed to fetch lands', error: error.message });
@@ -130,49 +141,38 @@ const getLands = async (req, res) => {
 // @access  Public
 const getLandById = async (req, res) => {
   try {
-    const land = await Land.findById(req.params.id).populate('owner', 'name email profileImage');
-    if (!land) return res.status(404).json({ message: 'Land not found' });
-
-    // Increment views uniquely (30-min window)
-    try {
-      const viewerIdentifier = req.user ? req.user._id.toString() : (req.ip || req.headers['x-forwarded-for'] || 'guest');
-      
-      // Try to create a unique view record (will fail if viewed within 30 mins due to unique index)
-      const isNewView = await View.create({ 
-        landId: req.params.id, 
-        viewerIdentifier 
-      }).catch(() => null); // Ignore E11000 duplicate key error
-
-      if (isNewView) {
-        await Land.findByIdAndUpdate(req.params.id, { $inc: { views: 1, viewCount: 1 } });
-      }
-    } catch (viewError) {
-      console.error("VIEW_TRACKING_ERROR:", viewError.message);
+    const cacheKey = `land_${req.params.id}`;
+    let land = getCache(cacheKey);
+    
+    if (!land) {
+      land = await Land.findById(req.params.id).populate('owner', 'name email profileImage').lean();
+      if (!land) return res.status(404).json({ message: 'Land not found' });
+      setCache(cacheKey, land, 60);
     }
 
-    // Track Recently Viewed (If authenticated)
+    // Background: Increment views uniquely (30-min window)
+    const viewerIdentifier = req.user ? req.user._id.toString() : (req.ip || req.headers['x-forwarded-for'] || 'guest');
+    View.create({ landId: req.params.id, viewerIdentifier })
+      .then(isNewView => {
+         if (isNewView) return Land.findByIdAndUpdate(req.params.id, { $inc: { views: 1, viewCount: 1 } });
+      })
+      .catch(() => null); // Ignore E11000 duplicate keys
+
+    // Background: Track Recently Viewed (If authenticated)
     if (req.user) {
-      try {
-        const user = await User.findById(req.user._id);
+      User.findById(req.user._id).then(user => {
         if (user) {
-          // Initialize if missing (for legacy users)
           if (!user.recentlyViewed) user.recentlyViewed = [];
-          
-          // Remove if already exists (to move it to top and update timestamp)
           user.recentlyViewed = user.recentlyViewed.filter(item => 
-            item.propertyId && item.propertyId.toString() !== land._id.toString()
+            item.propertyId && item.propertyId.toString() !== req.params.id
           );
-          
-          // Push to front with new timestamp
-          user.recentlyViewed.unshift({ propertyId: land._id, viewedAt: new Date() });
-          
-          // Keep only last 5 (Smart Limit)
+          user.recentlyViewed.unshift({ propertyId: req.params.id, viewedAt: new Date() });
           user.recentlyViewed = user.recentlyViewed.slice(0, 5);
-          await user.save();
+          user.save();
         }
-      } catch (err) {
-        console.error("RECENTLY_VIEWED_TRACK_ERROR:", err.message);
-      }
+      }).catch(err => {
+        console.error("RECENTLY_VIEWED_TRACK_ERROR_BACKGROUND:", err.message);
+      });
     }
 
     res.json(land);
