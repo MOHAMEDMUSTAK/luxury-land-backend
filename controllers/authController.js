@@ -141,16 +141,25 @@ const toggleWishlist = async (req, res) => {
     }
 
     // Sync wishlistCount on Land model (Recalculate for 100% accuracy)
+    let syncCount = 0;
     try {
-      const count = await User.countDocuments({ wishlist: landId });
-      await Land.findByIdAndUpdate(landId, { wishlistCount: count });
+      syncCount = await User.countDocuments({ wishlist: landId });
+      await Land.findByIdAndUpdate(landId, { wishlistCount: syncCount });
     } catch (syncError) {
       console.error("WISHLIST_COUNT_SYNC_ERROR:", syncError.message);
+      // Fallback: lookup current count from Land if sync fails
+      try {
+         const land = await Land.findById(landId).select('wishlistCount');
+         if (land) syncCount = land.wishlistCount;
+      } catch(e) {}
     }
 
     // Fetch updated wishlist to return to frontend
     const updatedUser = await User.findById(userId).select('wishlist');
-    return res.status(200).json({ wishlist: updatedUser.wishlist || [] });
+    return res.status(200).json({ 
+        wishlist: updatedUser.wishlist || [],
+        wishlistCount: syncCount
+    });
   } catch (error) {
     console.error("TOGGLE_WISHLIST_ERROR:", error);
     res.status(500).json({ message: 'Server Error' });

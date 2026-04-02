@@ -151,12 +151,23 @@ const getLandById = async (req, res) => {
     }
 
     // Background: Increment views uniquely (30-min window)
-    const viewerIdentifier = req.user ? req.user._id.toString() : (req.ip || req.headers['x-forwarded-for'] || 'guest');
-    View.create({ landId: req.params.id, viewerIdentifier })
-      .then(isNewView => {
-         if (isNewView) return Land.findByIdAndUpdate(req.params.id, { $inc: { views: 1, viewCount: 1 } });
-      })
-      .catch(() => null); // Ignore E11000 duplicate keys
+    (async () => {
+      try {
+        const crypto = require('crypto');
+        const rawIp = req.headers['x-forwarded-for']?.split(',')[0] || req.ip || 'guest';
+        const viewerIdentifier = req.user 
+          ? req.user._id.toString() 
+          : crypto.createHash('sha256').update(rawIp).digest('hex');
+
+        const existingView = await View.findOne({ landId: req.params.id, viewerIdentifier });
+        if (!existingView) {
+          await View.create({ landId: req.params.id, viewerIdentifier });
+          await Land.findByIdAndUpdate(req.params.id, { $inc: { views: 1, viewCount: 1 } });
+        }
+      } catch (err) {
+        // Ignore errors (e.g. race conditions inserting same view)
+      }
+    })();
 
     // Background: Track Recently Viewed (If authenticated)
     if (req.user) {
