@@ -2,7 +2,7 @@ const Land = require('../models/Land');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const View = require('../models/View');
-const { getCache, setCache, clearCache } = require('../utils/cache');
+const { getCache, setCache } = require('../utils/cache');
 
 // Helper to calculate sq ft value for any unit
 const getSqftValue = (value, unit) => {
@@ -420,10 +420,7 @@ const deleteLand = async (req, res) => {
 // @access  Private
 const getOwnerLands = async (req, res) => {
   try {
-    const lands = await Land.find({ owner: req.user.id })
-      .select('title images town state propertyCategory listingType size sizeUnit landType price rentPerMonth createdAt averageRating reviewCount status isActive views viewCount wishlistCount')
-      .sort({ createdAt: -1 })
-      .lean();
+    const lands = await Land.find({ owner: req.user.id }).sort({ createdAt: -1 });
     res.json(lands);
   } catch (error) {
     res.status(500).json({ message: 'Server Error', error: error.message });
@@ -452,17 +449,11 @@ const toggleActive = async (req, res) => {
 // @access  Public
 const getRecommendedLands = async (req, res) => {
   try {
-    const cacheKey = 'recommended_lands';
-    const cachedData = getCache(cacheKey);
-    if (cachedData) return res.status(200).json(cachedData);
-
     const lands = await Land.find({ isActive: true })
       .select('title images town state propertyCategory listingType size sizeUnit landType price rentPerMonth createdAt averageRating reviewCount status owner')
       .sort({ views: -1, createdAt: -1 })
       .limit(10)
       .lean();
-
-    setCache(cacheKey, lands, 60);
     res.json(lands);
   } catch (error) {
     res.status(500).json({ message: 'Server Error', error: error.message });
@@ -501,11 +492,6 @@ const addReview = async (req, res) => {
       land.reviews.reduce((acc, item) => item.rating + acc, 0) / land.reviews.length;
 
     await land.save();
-
-    // Invalidate cache for this land so fresh rating shows
-    clearCache(`land_${req.params.id}`);
-    clearCache(`similar_${req.params.id}`);
-
     res.status(201).json({ message: 'Review added' });
   } catch (error) {
     res.status(500).json({ message: 'Server Error', error: error.message });
@@ -517,13 +503,10 @@ const addReview = async (req, res) => {
 // @access  Public
 const getSimilarProperties = async (req, res) => {
   try {
-    const cacheKey = `similar_${req.params.id}`;
-    const cachedData = getCache(cacheKey);
-    if (cachedData) return res.status(200).json(cachedData);
-
-    const land = await Land.findById(req.params.id).lean();
+    const land = await Land.findById(req.params.id);
     if (!land) return res.status(404).json({ message: 'Land not found' });
 
+    // Priority 1: same town, Priority 2: same propertyCategory, Priority 3: similar price
     const similar = await Land.find({
       _id: { $ne: land._id },
       isActive: true,
@@ -537,8 +520,6 @@ const getSimilarProperties = async (req, res) => {
     .limit(6)
     .lean()
     .populate('owner', 'name profileImage isVerified');
-
-    setCache(cacheKey, similar, 60);
     res.json(similar);
   } catch (error) {
     res.status(500).json({ message: 'Server Error', error: error.message });

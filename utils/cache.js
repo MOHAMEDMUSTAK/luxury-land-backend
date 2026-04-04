@@ -1,5 +1,4 @@
 const cache = new Map();
-const MAX_CACHE_SIZE = 500; // Prevent unbounded memory growth in production
 
 /**
  * Get item from cache
@@ -19,27 +18,12 @@ const getCache = (key) => {
 };
 
 /**
- * Check if key exists and is not expired
- * @param {string} key
- * @returns {boolean}
- */
-const hasCache = (key) => {
-  return getCache(key) !== null;
-};
-
-/**
- * Set item in cache with LRU-style eviction
+ * Set item in cache
  * @param {string} key
  * @param {any} data
  * @param {number} ttl TTL in seconds
  */
 const setCache = (key, data, ttl) => {
-  // Evict oldest entries if cache is full
-  if (cache.size >= MAX_CACHE_SIZE) {
-    const keysToDelete = [...cache.keys()].slice(0, 100); // Remove oldest 100
-    keysToDelete.forEach(k => cache.delete(k));
-  }
-  
   cache.set(key, {
     data,
     expiry: Date.now() + (ttl * 1000)
@@ -64,7 +48,6 @@ const clearCache = (prefix = null) => {
 
 module.exports = {
   getCache,
-  hasCache,
   setCache,
   clearCache
 };
