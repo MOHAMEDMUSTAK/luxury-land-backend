@@ -150,40 +150,43 @@ const getLandById = async (req, res) => {
       setCache(cacheKey, land, 60);
     }
 
-    // Background: Increment views uniquely (30-min window)
-    (async () => {
-      try {
-        const crypto = require('crypto');
-        const rawIp = req.headers['x-forwarded-for']?.split(',')[0] || req.ip || 'guest';
-        const viewerIdentifier = req.user 
-          ? req.user._id.toString() 
-          : crypto.createHash('sha256').update(rawIp).digest('hex');
+    // Background activities: ONLY if this is a real view, not a prefetch
+    if (req.query.prefetch !== 'true') {
+      // Background: Increment views uniquely (30-min window)
+      (async () => {
+        try {
+          const crypto = require('crypto');
+          const rawIp = req.headers['x-forwarded-for']?.split(',')[0] || req.ip || 'guest';
+          const viewerIdentifier = req.user 
+            ? req.user._id.toString() 
+            : crypto.createHash('sha256').update(rawIp).digest('hex');
 
-        const existingView = await View.findOne({ landId: req.params.id, viewerIdentifier });
-        if (!existingView) {
-          await View.create({ landId: req.params.id, viewerIdentifier });
-          await Land.findByIdAndUpdate(req.params.id, { $inc: { views: 1, viewCount: 1 } });
+          const existingView = await View.findOne({ landId: req.params.id, viewerIdentifier });
+          if (!existingView) {
+            await View.create({ landId: req.params.id, viewerIdentifier });
+            await Land.findByIdAndUpdate(req.params.id, { $inc: { views: 1, viewCount: 1 } });
+          }
+        } catch (err) {
+          // Ignore errors (e.g. race conditions inserting same view)
         }
-      } catch (err) {
-        // Ignore errors (e.g. race conditions inserting same view)
+      })();
+
+      // Background: Track Recently Viewed (If authenticated)
+      if (req.user) {
+        User.findById(req.user._id).then(user => {
+          if (user) {
+            if (!user.recentlyViewed) user.recentlyViewed = [];
+            user.recentlyViewed = user.recentlyViewed.filter(item => 
+              item.propertyId && item.propertyId.toString() !== req.params.id
+            );
+            user.recentlyViewed.unshift({ propertyId: req.params.id, viewedAt: new Date() });
+            user.recentlyViewed = user.recentlyViewed.slice(0, 5);
+            user.save();
+          }
+        }).catch(err => {
+          console.error("RECENTLY_VIEWED_TRACK_ERROR_BACKGROUND:", err.message);
+        });
       }
-    })();
-
-    // Background: Track Recently Viewed (If authenticated)
-    if (req.user) {
-      User.findById(req.user._id).then(user => {
-        if (user) {
-          if (!user.recentlyViewed) user.recentlyViewed = [];
-          user.recentlyViewed = user.recentlyViewed.filter(item => 
-            item.propertyId && item.propertyId.toString() !== req.params.id
-          );
-          user.recentlyViewed.unshift({ propertyId: req.params.id, viewedAt: new Date() });
-          user.recentlyViewed = user.recentlyViewed.slice(0, 5);
-          user.save();
-        }
-      }).catch(err => {
-        console.error("RECENTLY_VIEWED_TRACK_ERROR_BACKGROUND:", err.message);
-      });
     }
 
     res.json(land);
