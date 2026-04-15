@@ -1,3 +1,17 @@
+<<<<<<< HEAD
+const mongoose = require("mongoose");
+
+const landSchema = new mongoose.Schema({
+  title: String,
+  price: Number,
+  location: String,
+  image: String,
+  phone: String,
+  userId: String, // 👈 important
+});
+
+module.exports = mongoose.model("Land", landSchema);
+=======
 const mongoose = require('mongoose');
 
 const landSchema = new mongoose.Schema({
@@ -206,3 +220,4 @@ landSchema.index({ listingType: 1 });
 landSchema.index({ propertyCategory: 1 });
 
 module.exports = mongoose.model('Land', landSchema);
+>>>>>>> d61f5f806cc9040115f6d6cb73058e708a34f71d

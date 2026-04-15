@@ -1,3 +1,17 @@
+<<<<<<< HEAD
+const mongoose = require("mongoose");
+
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log("✅ MongoDB Connected");
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+module.exports = connectDB;
+=======
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
@@ -11,3 +25,4 @@ const connectDB = async () => {
 };
 
 module.exports = connectDB;
+>>>>>>> d61f5f806cc9040115f6d6cb73058e708a34f71d
