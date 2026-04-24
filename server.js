@@ -1,22 +1,3 @@
-<<<<<<< HEAD
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const connectDB = require("./config/db");
-
-const app = express();
-connectDB();
-
-app.use(cors());
-app.use(express.json());
-
-app.use("/api/auth", require("./routes/auth"));
-app.use("/api/land", require("./routes/land"));
-
-app.listen(process.env.PORT, () =>
-  console.log("🚀 Server running")
-);
-=======
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
@@ -26,9 +7,20 @@ console.log("Using DB:", process.env.MONGO_URI);
 
 const http = require('http');
 const { Server } = require('socket.io');
+const connectDB = require("./config/db");
 
 const app = express();
 const server = http.createServer(app);
+
+// Use the local connectDB as fallback or direct mongoose connection
+if (process.env.MONGO_URI) {
+  mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log("MongoDB connected successfully via process.env.MONGO_URI"))
+    .catch(err => console.error("MongoDB connection error:", err));
+} else {
+  // If MONGO_URI is missing from env, use local connectDB module
+  connectDB();
+}
 
 const allowedOrigins = [
   "http://localhost:3000",
@@ -64,7 +56,6 @@ io.on('connection', (socket) => {
 
   // 1-on-1 Chat: Send message to specific user
   socket.on('sendMessage', (data) => {
-    // data: { recipientId, senderId, text, chatId, timestamp }
     const { recipientId } = data;
     if (recipientId) {
       io.to(`user_${recipientId}`).emit('receiveMessage', data);
@@ -74,7 +65,6 @@ io.on('connection', (socket) => {
 
   // 1-on-1 Chat: Notify sender that messages were read
   socket.on('mark_read', (data) => {
-    // data: { recipientId, senderId, chatId }
     const { senderId } = data;
     if (senderId) {
       io.to(`user_${senderId}`).emit('messages_read', data);
@@ -84,7 +74,6 @@ io.on('connection', (socket) => {
 
   // 1-on-1 Chat: Update offer status (Accepted/Rejected)
   socket.on('update_offer_status', (data) => {
-    // data: { recipientId, senderId, chatId, messageId, status }
     const { recipientId } = data;
     if (recipientId) {
       io.to(`user_${recipientId}`).emit('offer_status_updated', data);
@@ -144,12 +133,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Mount routes
-app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/land', require('./routes/landRoutes'));
-app.use('/api/chat', require('./routes/chatRoutes'));
-app.use('/api/notifications', require('./routes/notificationRoutes'));
+// Mount routes (using both route schemas detected in conflict)
+app.use('/api/auth', require('./routes/authRoutes').router || require('./routes/auth'));
+app.use('/api/land', require('./routes/landRoutes').router || require('./routes/land'));
+try { app.use('/api/users', require('./routes/userRoutes')); } catch(e){}
+try { app.use('/api/chat', require('./routes/chatRoutes')); } catch(e){}
+try { app.use('/api/notifications', require('./routes/notificationRoutes')); } catch(e){}
 
 // Basic route for testing server
 app.get('/', (req, res) => {
@@ -158,15 +147,6 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-// Connect to MongoDB and start server AFTER connection
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log("MongoDB connected successfully");
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-    });
-  })
-  .catch(err => {
-    console.error("MongoDB connection error:", err);
-  });
->>>>>>> d61f5f806cc9040115f6d6cb73058e708a34f71d
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+});
