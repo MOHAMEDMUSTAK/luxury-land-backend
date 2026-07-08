@@ -141,7 +141,14 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 // Connect to MongoDB and start server AFTER connection
-mongoose.connect(process.env.MONGO_URI)
+// Connect to MongoDB with optimized connection pool
+mongoose.connect(process.env.MONGO_URI, {
+    maxPoolSize: 10,                  // Max concurrent connections
+    minPoolSize: 2,                   // Keep 2 connections warm (avoids cold-start)
+    serverSelectionTimeoutMS: 5000,   // Fail fast if server unreachable
+    socketTimeoutMS: 10000,           // Kill stale sockets after 10s
+    heartbeatFrequencyMS: 10000,      // Check server health every 10s
+  })
   .then(() => {
     console.log("MongoDB connected successfully");
     server.listen(PORT, '0.0.0.0', () => {

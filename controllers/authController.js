@@ -79,7 +79,8 @@ const loginUser = async (req, res) => {
     const user = await User.findOne({ email }).select('+password');
 
     if (user && (await user.matchPassword(password))) {
-      await User.findByIdAndUpdate(user._id, { lastActive: new Date() });
+      // Fire-and-forget: update lastActive without blocking the response
+      User.findByIdAndUpdate(user._id, { lastActive: new Date() }).catch(() => {});
       
       res.json({
         id: user._id,
