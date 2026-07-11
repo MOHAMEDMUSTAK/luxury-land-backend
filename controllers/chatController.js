@@ -1,8 +1,8 @@
 const Message = require('../models/Message');
-const Notification = require('../models/Notification');
 const Land = require('../models/Land');
 const User = require('../models/User');
 const Chat = require('../models/Chat');
+const { notify } = require('../services/notificationService');
 
 // @desc    Get or create a 1-on-1 chat with another user
 // @route   GET /api/chat/:userId
@@ -94,15 +94,18 @@ const sendChatMessage = async (req, res) => {
     chat.lastMessage = { text, timestamp: new Date() };
     await chat.save();
 
-    // Notify recipient (simplified)
+    // Notify recipient via real-time notification service
     const recipientId = chat.participants.find(p => p.toString() !== senderId.toString());
     if (recipientId) {
-       await Notification.create({
-         user: recipientId,
-         message: `New message from ${req.user.name}`,
-         type: 'chat',
-         link: `/chat/${chat._id}`
-       });
+      const io = req.app.get('io');
+      await notify(io, {
+        userId: recipientId,
+        type: 'chat',
+        title: 'New Message',
+        message: `${req.user.name}: ${text.length > 60 ? text.substring(0, 60) + '…' : text}`,
+        link: `/chat/${chat._id}`,
+        priority: 'high'
+      });
     }
 
     res.status(201).json(newMessage);
@@ -275,6 +278,21 @@ const updateOfferStatus = async (req, res) => {
     chat.lastMessage = { text: `Offer ${status}: ₹${message.offer.price}`, timestamp: new Date() };
     
     await chat.save();
+
+    // Notify the offer sender about the status update
+    const offerSenderId = message.sender.toString();
+    if (offerSenderId !== userId) {
+      const io = req.app.get('io');
+      await notify(io, {
+        userId: offerSenderId,
+        type: 'offer',
+        title: `Offer ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+        message: `Your offer of ₹${message.offer.price.toLocaleString('en-IN')} has been ${status}.`,
+        link: `/chat/${chatId}`,
+        priority: status === 'accepted' ? 'high' : 'normal'
+      });
+    }
+
     res.status(200).json(message);
   } catch (error) {
     console.error("UPDATE_OFFER_ERROR:", error.message);

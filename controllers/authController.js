@@ -4,6 +4,7 @@ const Notification = require('../models/Notification');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const sendEmail = require('../utils/sendEmail');
+const { notify } = require('../services/notificationService');
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -49,6 +50,21 @@ const registerUser = async (req, res) => {
         } catch (emailError) {
           console.error("WELCOME_EMAIL_ERROR:", emailError.message);
         }
+      }
+
+      // Send in-app welcome notification
+      try {
+        const io = req.app.get('io');
+        await notify(io, {
+          userId: user._id,
+          type: 'account',
+          title: 'Welcome to LuxuryLand! 🎉',
+          message: `Hi ${user.name}, your account has been created successfully. Explore premium properties today!`,
+          link: '/profile/edit',
+          priority: 'normal'
+        });
+      } catch (notifError) {
+        console.error("WELCOME_NOTIF_ERROR:", notifError.message);
       }
 
       res.status(201).json({

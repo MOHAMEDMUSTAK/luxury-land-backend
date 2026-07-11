@@ -19,7 +19,7 @@ const allowedOrigins = [
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
-// Socket.io setup for real-time chat
+// Socket.io setup for real-time chat + notifications
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
@@ -34,6 +34,9 @@ const io = new Server(server, {
     credentials: true
   }
 });
+
+// ★ Share Socket.IO instance with Express routes (for notification service)
+app.set('io', io);
 
 io.on('connection', (socket) => {
   console.log('A user connected to chat:', socket.id);

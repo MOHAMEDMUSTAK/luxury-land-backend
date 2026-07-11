@@ -1,7 +1,7 @@
 const Land = require('../models/Land');
-const Notification = require('../models/Notification');
 const User = require('../models/User');
 const View = require('../models/View');
+const { notify, broadcastToAudience } = require('../services/notificationService');
 const { getCache, setCache } = require('../utils/cache');
 
 // Helper to calculate sq ft value for any unit
@@ -164,7 +164,29 @@ const getLandById = async (req, res) => {
           const existingView = await View.findOne({ landId: req.params.id, viewerIdentifier });
           if (!existingView) {
             await View.create({ landId: req.params.id, viewerIdentifier });
-            await Land.findByIdAndUpdate(req.params.id, { $inc: { views: 1, viewCount: 1 } });
+            const result = await Land.findByIdAndUpdate(
+              req.params.id, 
+              { $inc: { views: 1, viewCount: 1 } },
+              { new: true, select: 'views owner title' }
+            );
+
+            // ★ View milestone notifications (50, 100, 500, 1000)
+            if (result) {
+              const milestones = [50, 100, 500, 1000, 5000];
+              const views = result.views;
+              if (milestones.includes(views)) {
+                const io = req.app?.get?.('io');
+                notify(io, {
+                  userId: result.owner,
+                  type: 'view_milestone',
+                  title: `🎉 ${views} Views Reached!`,
+                  message: `Your property "${result.title}" has reached ${views.toLocaleString('en-IN')} views!`,
+                  link: `/property/${req.params.id}`,
+                  priority: views >= 500 ? 'high' : 'normal',
+                  metadata: { propertyId: req.params.id, milestone: views }
+                });
+              }
+            }
           }
         } catch (err) {
           // Ignore errors (e.g. race conditions inserting same view)
@@ -303,14 +325,30 @@ const addLand = async (req, res) => {
 
     console.log("LAND_CREATED_SUCCESSFULLY:", land._id);
     
-    // Create SYSTEM notification for the creator
+    // Create SYSTEM notification for the creator via notification service
     try {
       if (req.user && req.user._id) {
-        await Notification.create({
-          user: req.user._id,
-          message: `Success! Your property "${title}" is now live in the marketplace.`,
-          type: 'system',
-          link: `/property/${land._id}`
+        const io = req.app.get('io');
+        
+        // 1. Notify the creator (Success message)
+        await notify(io, {
+          userId: req.user._id,
+          type: 'property_approved',
+          title: 'Property Published! 🏡',
+          message: `Your property "${title}" is now live in the marketplace.`,
+          link: `/property/${land._id}`,
+          priority: 'high',
+          metadata: { propertyId: land._id.toString() }
+        });
+
+        // 2. Broadcast to ALL OTHER users about the new listing
+        await broadcastToAudience(io, {
+          audience: 'all',
+          type: 'new_match',
+          title: 'New Property Listed! 🔥',
+          message: `A new property "${title}" just hit the market for ₹${price.toLocaleString('en-IN')}. Check it out!`,
+          link: `/property/${land._id}`,
+          priority: 'normal'
         });
       }
     } catch (err) {
@@ -394,6 +432,21 @@ const updateLand = async (req, res) => {
 
     const updatedLand = await Land.findByIdAndUpdate(req.params.id, updatedData, { new: true, runValidators: true });
     console.log("LAND_UPDATED_SUCCESSFULLY:", updatedLand._id);
+
+    // ★ Notify owner if property status changed (e.g., Available → Sold)
+    if (req.body.status && req.body.status !== land.status) {
+      const io = req.app.get('io');
+      await notify(io, {
+        userId: req.user.id,
+        type: 'property_status',
+        title: 'Property Status Updated',
+        message: `Your property "${updatedLand.title}" is now marked as ${req.body.status}.`,
+        link: `/property/${updatedLand._id}`,
+        priority: 'normal',
+        metadata: { propertyId: updatedLand._id.toString(), newStatus: req.body.status }
+      });
+    }
+
     res.json(updatedLand);
   } catch (error) {
     console.error("UPDATE_LAND_ERROR:", error.message);

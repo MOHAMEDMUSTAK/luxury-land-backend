@@ -57,9 +57,33 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Land'
   }],
+  pushSubscriptions: [{
+    endpoint: String,
+    keys: {
+      p256dh: String,
+      auth: String
+    }
+  }],
+  isAdmin: {
+    type: Boolean,
+    default: false
+  },
   emailNotifications: {
     type: Boolean,
     default: true
+  },
+  notificationPreferences: {
+    chat: { type: Boolean, default: true },
+    inquiry: { type: Boolean, default: true },
+    property_approved: { type: Boolean, default: true },
+    property_status: { type: Boolean, default: true },
+    view_milestone: { type: Boolean, default: true },
+    price_change: { type: Boolean, default: true },
+    new_match: { type: Boolean, default: true },
+    promotion: { type: Boolean, default: true },
+    offer: { type: Boolean, default: true },
+    account: { type: Boolean, default: true },
+    system: { type: Boolean, default: true }
   },
   resetToken: String,
   resetTokenExpiry: Date,
