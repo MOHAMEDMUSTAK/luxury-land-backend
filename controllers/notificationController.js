@@ -152,25 +152,36 @@ const subscribeToPush = async (req, res) => {
   try {
     const subscription = req.body;
     
-    if (!subscription || !subscription.endpoint) {
-      return res.status(400).json({ message: 'Invalid subscription object' });
+    if (!subscription || !subscription.endpoint || !subscription.keys) {
+      return res.status(400).json({ message: 'Invalid subscription object. Requires endpoint and keys.' });
     }
 
     const User = require('../models/User');
     
-    // Add subscription if it doesn't already exist for this user
+    // First remove any existing subscription with the same endpoint
+    // (handles re-registrations when browser regenerates subscription keys)
+    await User.updateOne(
+      { _id: req.user.id },
+      { $pull: { pushSubscriptions: { endpoint: subscription.endpoint } } }
+    );
+
+    // Then add the fresh subscription
     await User.updateOne(
       { _id: req.user.id },
       { 
-        $addToSet: { 
+        $push: { 
           pushSubscriptions: {
             endpoint: subscription.endpoint,
-            keys: subscription.keys
+            keys: {
+              p256dh: subscription.keys.p256dh,
+              auth: subscription.keys.auth
+            }
           } 
         } 
       }
     );
 
+    console.log(`[PUSH] User ${req.user.id} subscribed: ${subscription.endpoint.slice(-20)}`);
     res.status(201).json({ message: 'Push subscription saved successfully' });
   } catch (error) {
     console.error("PUSH_SUBSCRIBE_ERROR:", error.message);

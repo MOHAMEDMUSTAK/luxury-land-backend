@@ -110,7 +110,10 @@ async function notify(io, options) {
       const payload = JSON.stringify({
         title,
         body: message,
-        icon: icon || TYPE_ICONS[type] || 'bell',
+        type,
+        priority,
+        tag: `${type}_${notification._id}`,
+        notificationId: notification._id.toString(),
         url: link
       });
 
@@ -269,7 +272,14 @@ async function broadcastToAudience(io, options) {
 
   // Send Web Push Notifications for broadcast
   if (process.env.VAPID_PUBLIC_KEY) {
-    const payload = JSON.stringify({ title, body: message, icon, url: link });
+    const payload = JSON.stringify({ 
+      title, 
+      body: message, 
+      type,
+      priority,
+      tag: `broadcast_${broadcastId}`,
+      url: link 
+    });
     const allRemovals = {}; // { userId: [endpoints...] }
     const pushPromises = [];
 
